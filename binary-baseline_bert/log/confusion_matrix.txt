@@ -1,0 +1,60 @@
+##############################time: 2023-01-28 16:22:59confusion matrix on epoch 0 dev set: 
+tensor([[999, 279],
+        [993, 784]])
+##############################time: 2023-01-28 16:29:37confusion matrix on epoch 1 dev set: 
+tensor([[1019,  240],
+        [ 973,  823]])
+##############################time: 2023-01-28 16:36:20confusion matrix on epoch 2 dev set: 
+tensor([[ 953,  185],
+        [1039,  878]])
+##############################time: 2023-01-28 16:43:03confusion matrix on epoch 3 dev set: 
+tensor([[ 934,  153],
+        [1058,  910]])
+##############################time: 2023-01-28 16:49:46confusion matrix on epoch 4 dev set: 
+tensor([[ 862,  129],
+        [1130,  934]])
+##############################time: 2023-01-28 16:56:29confusion matrix on epoch 5 dev set: 
+tensor([[ 715,   86],
+        [1277,  977]])
+##############################time: 2023-01-28 17:03:13confusion matrix on epoch 6 dev set: 
+tensor([[ 688,   74],
+        [1304,  989]])
+##############################time: 2023-01-28 17:09:58confusion matrix on epoch 7 dev set: 
+tensor([[ 826,  104],
+        [1166,  959]])
+##############################time: 2023-01-28 17:16:41confusion matrix on epoch 8 dev set: 
+tensor([[ 798,   84],
+        [1194,  979]])
+##############################time: 2023-01-28 17:23:26confusion matrix on epoch 9 dev set: 
+tensor([[ 938,  105],
+        [1054,  958]])
+##############################time: 2023-01-28 17:30:09confusion matrix on epoch 10 dev set: 
+tensor([[ 853,   89],
+        [1139,  974]])
+##############################time: 2023-01-28 17:36:52confusion matrix on epoch 11 dev set: 
+tensor([[ 837,   82],
+        [1155,  981]])
+##############################time: 2023-01-28 17:43:35confusion matrix on epoch 12 dev set: 
+tensor([[ 841,   82],
+        [1151,  981]])
+##############################time: 2023-01-28 17:50:16confusion matrix on epoch 13 dev set: 
+tensor([[ 858,   77],
+        [1134,  986]])
+##############################time: 2023-01-28 17:56:58confusion matrix on epoch 14 dev set: 
+tensor([[ 861,   73],
+        [1131,  990]])
+##############################time: 2023-01-28 18:03:40confusion matrix on epoch 15 dev set: 
+tensor([[ 879,   67],
+        [1113,  996]])
+##############################time: 2023-01-28 18:10:22confusion matrix on epoch 16 dev set: 
+tensor([[ 829,   55],
+        [1163, 1008]])
+##############################time: 2023-01-28 18:17:02confusion matrix on epoch 17 dev set: 
+tensor([[ 938,   70],
+        [1054,  993]])
+##############################time: 2023-01-28 18:23:43confusion matrix on epoch 18 dev set: 
+tensor([[ 880,   54],
+        [1112, 1009]])
+##############################time: 2023-01-28 18:30:24confusion matrix on epoch 19 dev set: 
+tensor([[ 802,   42],
+        [1190, 1021]])
