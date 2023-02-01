@@ -7,7 +7,9 @@ import warnings
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.optim import AdamW
+import torch.nn.functional as F
+from matplotlib import pyplot as plt
+from torch import optim
 from tqdm import tqdm
 from transformers import BertModel, BertTokenizer
 
@@ -24,6 +26,58 @@ from uer.utils.seed import set_seed
 from uer.utils.vocab import Vocab
 
 warnings.filterwarnings('ignore')
+
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.7, gamma=2, num_classes=3, size_average=True):
+        """
+        focal_loss损失函数, -α(1-yi)**γ *ce_loss(xi,yi)
+        步骤详细的实现了 focal_loss损失函数.
+        :param alpha:   阿尔法α,类别权重.      当α是列表时,为各类别权重,当α为常数时,类别权重为[α, 1-α, 1-α, ....],常用于 目标检测算法中抑制背景类 , retainnet中设置为0.25
+        :param gamma:   伽马γ,难易样本调节参数. retainnet中设置为2
+        :param num_classes:     类别数量
+        :param size_average:    损失计算方式,默认取均值
+        """
+        super(FocalLoss, self).__init__()
+        self.size_average = size_average
+        if isinstance(alpha, list):
+            assert len(alpha) == num_classes  # α可以以list方式输入,size:[num_classes] 用于对不同类别精细地赋予权重
+            print(" --- FocalLoss alpha = {}, 将对每一类权重进行精细化赋值 --- ".format(alpha))
+            self.alpha = torch.Tensor(alpha)
+        else:
+            assert alpha < 1  # 如果α为一个常数,则降低第一类的影响,在目标检测中为第一类
+            print(" --- FocalLoss alpha = {} ,将对背景类进行衰减,请在目标检测任务中使用 --- ".format(alpha))
+            self.alpha = torch.zeros(num_classes)
+            self.alpha[0] += alpha
+            self.alpha[1:] += (1 - alpha)  # α 最终为 [ α, 1-α, 1-α, 1-α, 1-α, ...] size:[num_classes]
+
+        self.gamma = gamma
+
+    def forward(self, preds, labels):
+        """
+        focal_loss损失计算
+        :param preds:   预测类别. size:[B,N,C] or [B,C]    分别对应与检测与分类任务, B 批次, N检测框数, C类别数
+        :param labels:  实际类别. size:[B,N] or [B]
+        :return:
+        """
+        # assert preds.dim()==2 and labels.dim()==1
+        preds = preds.view(-1, preds.size(-1))
+        self.alpha = self.alpha.to(preds.device)
+        preds_logsoft = F.log_softmax(preds, dim=1)  # log_softmax
+        preds_softmax = torch.exp(preds_logsoft)  # softmax
+
+        preds_softmax = preds_softmax.gather(1, labels.view(-1, 1))  # 这部分实现nll_loss ( crossempty = log_softmax + nll )
+        preds_logsoft = preds_logsoft.gather(1, labels.view(-1, 1))
+        self.alpha = self.alpha.gather(0, labels.view(-1))
+        loss = -torch.mul(torch.pow((1 - preds_softmax), self.gamma),
+                          preds_logsoft)  # torch.pow((1-preds_softmax), self.gamma) 为focal loss中 (1-pt)**γ
+
+        loss = torch.mul(self.alpha, loss.t())
+        if self.size_average:
+            loss = loss.mean()
+        else:
+            loss = loss.sum()
+        return loss
 
 
 # 加入 RNN
@@ -47,8 +101,6 @@ class BertClassifier(nn.Module):
         self.cnn = cnn
         # 加入 RNN或者LSTM
         if add_rnn_or_lstm_or_cnn:
-            bidirectional = True
-            num = 2 if bidirectional else 1
             if rnn:
                 self.rnn = nn.RNN(input_size=args.hidden_size, hidden_size=args.hidden_size, num_layers=2,
                                   batch_first=True, dropout=0.4,
@@ -59,7 +111,7 @@ class BertClassifier(nn.Module):
                                    dropout=0.4, bidirectional=True)
             if rnn or lstm:
                 self.output_layer = nn.Sequential(
-                    nn.Linear(args.hidden_size * num, args.hidden_size // 4),
+                    nn.Linear(args.hidden_size * 2, args.hidden_size // 4),
                     nn.ReLU(),
                     nn.Linear(args.hidden_size // 4, args.labels_num),
                 )
@@ -86,29 +138,18 @@ class BertClassifier(nn.Module):
                 nn.Linear(args.hidden_size // 4, args.labels_num),
             )
 
-        # 加入CNN
-        # self.cnn = nn.Sequential(
-        #     nn.Conv1d(in_channels=args.hidden_size, out_channels=args.hidden_size, kernel_size=3, stride=1, padding=1),
-        #     nn.ReLU(),
-        #     nn.MaxPool1d(kernel_size=2, stride=2),
-        #     nn.Conv1d(in_channels=args.hidden_size, out_channels=args.hidden_size, kernel_size=3, stride=1, padding=1),
-        #     nn.ReLU(),
-        #     nn.MaxPool1d(kernel_size=2, stride=2),
-        # )
-        # self.output_layer = nn.Sequential(
-        #     nn.Linear(args.hidden_size, args.hidden_size // 4),
-        #     nn.ReLU(),
-        #     nn.Linear(args.hidden_size // 4, args.labels_num),
-        # )
-
         # 加入预训练
-        if args.pretrain:
-            self.postag_embedding = nn.Embedding(len(args.postag_vocab), args.emb_size, padding_idx=0)
+        # if args.pretrain:
+        #     self.postag_embedding = nn.Embedding(len(args.postag_vocab), args.emb_size, padding_idx=0)
 
         # self.output_layer = nn.Linear(args.hidden_size, args.labels_num)
 
         self.softmax = nn.Softmax(dim=-1)
-        self.criterion = nn.CrossEntropyLoss()
+        self.focalloss = True
+        if self.focalloss:
+            self.criterion = FocalLoss(alpha=[0.55, 0.45], gamma=2, num_classes=args.labels_num, size_average=False)
+        else:
+            self.criterion = nn.CrossEntropyLoss()
         self.use_vm = False if args.no_vm else True
         print("[BertClassifier] use visible_matrix: {}".format(self.use_vm))
 
@@ -122,9 +163,9 @@ class BertClassifier(nn.Module):
 
         if self.args.encoder == "bert":
             if self.args.pretrain:
-                postag_emb = self.postag_embedding(postag_ids)
+                # postag_emb = self.postag_embedding(postag_ids)
                 emb = self.embedding(src, mask, pos)
-                emb = emb + postag_emb
+                # emb = emb + postag_emb
             else:
                 emb = self.embedding(src, postag_ids, mask, pos)
         else:
@@ -164,9 +205,14 @@ class BertClassifier(nn.Module):
         # output = output.squeeze(0)
         # print("output.shape: {}".format(output.shape))
         # logits = self.rnn_net(output)
-        logits = self.softmax(self.output_layer(output))  # [batch_size x labels_num]
-        loss = self.criterion(logits.view(-1, self.labels_num), label.view(-1))
-        return loss, logits
+        if not self.focalloss:
+            logits = self.softmax(self.output_layer(output))  # [batch_size x labels_num]
+            loss = self.criterion(logits.view(-1, self.labels_num), label.view(-1))
+            return loss, logits
+        else:
+            logits = self.output_layer(output)
+            loss = self.criterion(logits.view(-1, self.labels_num), label.view(-1))
+            return loss, logits
 
 
 def add_knowledge_worker(params, postag_dict):
@@ -307,12 +353,27 @@ def main():
     set_seed(args.seed)
 
     # Count the number of labels.
-    # labels_set = dict()
+    labels_set = dict()
     columns = {}
+    # with open(args.train_path, mode="r", encoding="utf-8") as f:
+    #     for line_id, line in enumerate(f):
+    #         try:
+    #             line = line.strip().split("\t")
+    #             if line_id == 0:
+    #                 for i, column_name in enumerate(line):
+    #                     columns[column_name] = i
+    #                 continue
+    #             label = int(line[columns["label"]])
+    #             if label not in labels_set:
+    #                 labels_set[label] = 0
+    #             labels_set[label] += 1
+    #             # labels_set.add(label)
+    #         except:
+    #             pass
     args.labels_num = 2
     print("labels_num:", args.labels_num)
-    # for label, count in labels_set.items():
-    #     print("label: %d, count: %d" % (label, count))
+    for label, count in labels_set.items():
+        print("label: %d, count: %d" % (label, count))
     # Load vocabulary.
     vocab = Vocab()
     vocab.load(args.vocab_path)
@@ -346,6 +407,8 @@ def main():
 
     # Build classification model.
     model = BertClassifier(args)
+    # from models import BertClassifier
+    # model = BertClassifier.from_pretrained(args.pretrained_model_path, args=args, num_labels=args.labels_num)
 
     # Load or initialize parameters.
     # if args.pretrained_model_path is not None and os.path.exists(args.pretrained_model_path):
@@ -635,16 +698,19 @@ def main():
     print("Batch size: ", batch_size)
     print("The number of training instances:", instances_num)
 
-    param_optimizer = list(model.named_parameters())
-    # no_decay = ['bias', 'gamma', 'beta']
+    # no_decay = ['bias', 'LayerNorm.weight']
     # optimizer_grouped_parameters = [
-    #     {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay_rate': 0.01},
-    #     {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay_rate': 0.0}
+    #     {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+    #      'weight_decay': 0.01},
+    #     {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     # ]
-    #
+
+    # optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    # optimizer = Adam(optimizer_grouped_parameters, lr=args.learning_rate)
+
     # optimizer = BertAdam(optimizer_grouped_parameters, lr=args.learning_rate, warmup=args.warmup, t_total=train_steps)
-    optimizer = AdamW(model.parameters(), lr=args.learning_rate, eps=1e-8)
-    total_loss = 0.
+    optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, eps=1e-8)
+
     result = 0.0
     best_result = 0.0
 
@@ -655,13 +721,14 @@ def main():
     # print(model)
     skip_train = False
     if not skip_train:
+        epoch_losses = []
         for epoch in range(1, args.epochs_num + 1):
             model.train()
-
+            total_loss = 0.0
             # 学习率衰减，每个4epoch衰减一次，每次衰减为原来的0.7
-            # if epoch % 8 == 0:
-            #     for param_group in optimizer.param_groups:
-            #         param_group['lr'] *= 0.7
+            if epoch > 10 and epoch % 4 == 0:
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] *= 0.5
 
             pbar = tqdm(enumerate(
                 batch_loader(batch_size, input_ids, postag_ids, label_ids, mask_ids, pos_ids, vms)),
@@ -703,7 +770,8 @@ def main():
                 pbar.set_description(
                     "Epoch: {}, Loss: {:.3f} ".format(epoch, loss.item()))
                 pbar.update(1)
-
+            epoch_losses.append(total_loss / (i + 1))
+            print(f"Epoch {epoch} loss: {total_loss / (i + 1)}")
             print("Start evaluation on dev dataset.")
             result = evaluate(args, devset, False)
             if result > best_result:
@@ -723,6 +791,14 @@ def main():
         else:
             model.load_state_dict(torch.load(args.output_model_path))
         evaluate(args, testset, True)
+
+        # 绘制loss曲线
+        plt.plot(epoch_losses)
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.title('Loss Curve')
+        plt.savefig('./log/loss_curve.png')
+        plt.show()
     else:
         print("Start evaluation on test dataset.")
         evaluate(args, testset, True)
