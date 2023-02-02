@@ -1,0 +1,60 @@
+##############################time: 2023-02-02 17:11:13confusion matrix on dev set: 
+tensor([[   0,    0],
+        [1992, 1063]])
+##############################time: 2023-02-02 17:11:13confusion matrix on dev set: 
+tensor([[   0,    0],
+        [1992, 1063]])
+##############################time: 2023-02-02 17:11:13confusion matrix on dev set: 
+tensor([[   0,    0],
+        [1992, 1063]])
+##############################time: 2023-02-02 17:11:14confusion matrix on dev set: 
+tensor([[   0,    0],
+        [1992, 1063]])
+##############################time: 2023-02-02 17:11:14confusion matrix on dev set: 
+tensor([[   0,    0],
+        [1992, 1063]])
+##############################time: 2023-02-02 17:11:14confusion matrix on dev set: 
+tensor([[   0,    0],
+        [1992, 1063]])
+##############################time: 2023-02-02 17:11:15confusion matrix on dev set: 
+tensor([[   0,    1],
+        [1992, 1062]])
+##############################time: 2023-02-02 17:11:15confusion matrix on dev set: 
+tensor([[   1,    1],
+        [1991, 1062]])
+##############################time: 2023-02-02 17:11:15confusion matrix on dev set: 
+tensor([[   1,    1],
+        [1991, 1062]])
+##############################time: 2023-02-02 17:11:16confusion matrix on dev set: 
+tensor([[   1,    1],
+        [1991, 1062]])
+##############################time: 2023-02-02 17:11:16confusion matrix on dev set: 
+tensor([[   1,    1],
+        [1991, 1062]])
+##############################time: 2023-02-02 17:11:16confusion matrix on dev set: 
+tensor([[   2,    1],
+        [1990, 1062]])
+##############################time: 2023-02-02 17:11:16confusion matrix on dev set: 
+tensor([[   2,    1],
+        [1990, 1062]])
+##############################time: 2023-02-02 17:11:17confusion matrix on dev set: 
+tensor([[   6,    1],
+        [1986, 1062]])
+##############################time: 2023-02-02 17:11:17confusion matrix on dev set: 
+tensor([[   9,    1],
+        [1983, 1062]])
+##############################time: 2023-02-02 17:11:17confusion matrix on dev set: 
+tensor([[  15,    5],
+        [1977, 1058]])
+##############################time: 2023-02-02 17:11:18confusion matrix on dev set: 
+tensor([[  17,    5],
+        [1975, 1058]])
+##############################time: 2023-02-02 17:11:18confusion matrix on dev set: 
+tensor([[  22,    6],
+        [1970, 1057]])
+##############################time: 2023-02-02 17:11:18confusion matrix on dev set: 
+tensor([[ 135,   58],
+        [1857, 1005]])
+##############################time: 2023-02-02 17:11:19confusion matrix on dev set: 
+tensor([[ 810,  306],
+        [1182,  757]])
