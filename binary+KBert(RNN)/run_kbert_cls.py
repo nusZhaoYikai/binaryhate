@@ -3,7 +3,7 @@ import os
 import random
 import time
 import warnings
-import json
+
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -101,17 +101,19 @@ class BertClassifier(nn.Module):
         self.cnn = cnn
         # 加入 RNN或者LSTM
         if add_rnn_or_lstm_or_cnn:
+            bidirectional = True
+            num = 2 if bidirectional else 1
             if rnn:
                 self.rnn = nn.RNN(input_size=args.hidden_size, hidden_size=args.hidden_size, num_layers=2,
                                   batch_first=True, dropout=0.4,
-                                  bidirectional=True)
+                                  bidirectional=bidirectional)
             elif lstm:
                 self.rnn = nn.LSTM(input_size=args.hidden_size, hidden_size=args.hidden_size, num_layers=2,
                                    batch_first=True,
                                    dropout=0.4, bidirectional=True)
             if rnn or lstm:
                 self.output_layer = nn.Sequential(
-                    nn.Linear(args.hidden_size * 2, args.hidden_size // 4),
+                    nn.Linear(args.hidden_size * num, args.hidden_size // 4),
                     nn.ReLU(),
                     nn.Linear(args.hidden_size // 4, args.labels_num),
                 )
@@ -147,7 +149,7 @@ class BertClassifier(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
         self.focalloss = True
         if self.focalloss:
-            self.criterion = FocalLoss(alpha=[0.6, 0.3, 0.1], gamma=2, size_average=False)
+            self.criterion = FocalLoss(alpha=[0.55, 0.45], gamma=2, num_classes=args.labels_num, size_average=False)
         else:
             self.criterion = nn.CrossEntropyLoss()
         self.use_vm = False if args.no_vm else True
@@ -185,7 +187,6 @@ class BertClassifier(nn.Module):
                 mask = vm.unsqueeze(1)
                 mask = mask.float()
                 mask = (1.0 - mask) * -10000.0
-
             output = self.encoder(emb, mask).last_hidden_state
         else:
             output = self.encoder(emb, att_mask, vm)
@@ -193,7 +194,13 @@ class BertClassifier(nn.Module):
         # print("output.shape: {}".format(output.shape))
         if not self.cnn:
             if self.pooling == "mean":
-                output = torch.mean(output, dim=1)
+                # print("vm.shape: {}".format(vm.shape))
+                input_mask_expanded = att_mask.unsqueeze(-1).expand(output.size()).float()
+                sum_embeddings = torch.sum(output * input_mask_expanded, 1)
+                sum_mask = input_mask_expanded.sum(1)
+                sum_mask = torch.clamp(sum_mask, min=1e-9)
+                output = sum_embeddings / sum_mask
+                # output = mean_embeddings
             elif self.pooling == "max":
                 output = torch.max(output, dim=1)[0]
             elif self.pooling == "last":
@@ -382,7 +389,7 @@ def main():
     #             # labels_set.add(label)
     #         except:
     #             pass
-    args.labels_num = 3
+    args.labels_num = 2
     print("labels_num:", args.labels_num)
     for label, count in labels_set.items():
         print("label: %d, count: %d" % (label, count))
@@ -738,7 +745,7 @@ def main():
             model.train()
             total_loss = 0.0
             # 学习率衰减，每个4epoch衰减一次，每次衰减为原来的0.7
-            if epoch > 10 and epoch % 4 == 0:
+            if epoch > 15 and epoch % 4 == 0:
                 for param_group in optimizer.param_groups:
                     param_group['lr'] *= 0.5
 
