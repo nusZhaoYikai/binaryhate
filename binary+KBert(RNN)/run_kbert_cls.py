@@ -3,7 +3,7 @@ import os
 import random
 import time
 import warnings
-
+import json
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -147,13 +147,13 @@ class BertClassifier(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
         self.focalloss = True
         if self.focalloss:
-            self.criterion = FocalLoss(alpha=[0.55, 0.45], gamma=2, num_classes=args.labels_num, size_average=False)
+            self.criterion = FocalLoss(alpha=[0.6, 0.3, 0.1], gamma=2, size_average=False)
         else:
             self.criterion = nn.CrossEntropyLoss()
         self.use_vm = False if args.no_vm else True
         print("[BertClassifier] use visible_matrix: {}".format(self.use_vm))
 
-    def forward(self, src, postag_ids, label, mask, pos=None, vm=None):
+    def forward(self, src, postag_ids, label, att_mask, pos=None, vm=None):
         """
         Args:
             src: [batch_size x seq_length]
@@ -164,19 +164,31 @@ class BertClassifier(nn.Module):
         if self.args.encoder == "bert":
             if self.args.pretrain:
                 # postag_emb = self.postag_embedding(postag_ids)
-                emb = self.embedding(src, mask, pos)
+                emb = self.embedding(src, att_mask, pos)
                 # emb = emb + postag_emb
             else:
-                emb = self.embedding(src, postag_ids, mask, pos)
+                emb = self.embedding(src, postag_ids, att_mask, pos)
         else:
             emb = self.embedding(src)
         # Encoder.
         if not self.use_vm:
             vm = None
         if self.args.pretrain:
-            output = self.encoder(emb).last_hidden_state
+            if vm is None:
+                mask = (att_mask > 0). \
+                    unsqueeze(1). \
+                    repeat(1, emb.size(1), 1). \
+                    unsqueeze(1)
+                mask = mask.float()
+                mask = (1.0 - mask) * -10000.0
+            else:
+                mask = vm.unsqueeze(1)
+                mask = mask.float()
+                mask = (1.0 - mask) * -10000.0
+
+            output = self.encoder(emb, mask).last_hidden_state
         else:
-            output = self.encoder(emb, mask, vm)
+            output = self.encoder(emb, att_mask, vm)
         # Target.
         # print("output.shape: {}".format(output.shape))
         if not self.cnn:
@@ -370,7 +382,7 @@ def main():
     #             # labels_set.add(label)
     #         except:
     #             pass
-    args.labels_num = 2
+    args.labels_num = 3
     print("labels_num:", args.labels_num)
     for label, count in labels_set.items():
         print("label: %d, count: %d" % (label, count))
